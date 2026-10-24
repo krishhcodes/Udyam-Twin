@@ -1,2 +1,6 @@
 fastapi>=0.110
 uvicorn[standard]>=0.29
+numpy>=1.26
+pandas>=2.0
+scikit-learn>=1.4
+joblib>=1.3

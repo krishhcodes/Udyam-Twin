@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UDYAM-TWIN — Self-Calibrating Digital Twin Command Center</title>
+  <link rel="stylesheet" href="/static/app.css">
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="/static/three_mill.js"></script>
+</head>
+<body>
+
+  <!-- Top Navigation Bar -->
+  <header>
+    <div class="brand">
+      <h1>UDYAM-TWIN</h1>
+      <span class="badge-sim">SIMULATION MODE (SUPERVISED SIL)</span>
+    </div>
+    <div class="header-controls">
+      <div class="connection-status">
+        <div class="status-dot" id="statusDot"></div>
+        <span id="connectionStatusText">Connecting...</span>
+      </div>
+      <button class="btn btn-sm" id="btnAutoDemo" onclick="toggleAutoDemo()">Auto Demo: ON</button>
+      <button class="btn btn-sm" onclick="resetScenario()">Reset Scenario</button>
+      <button class="btn btn-sm btn-primary" onclick="openOnboardingModal()">+ Add Your Machine</button>
+      <a href="/operator" class="btn btn-sm" style="text-decoration:none;">Operator View 📱</a>
+    </div>
+  </header>
+
+  <main>
+    <!-- Line Flow & Throughput Banner -->
+    <section class="line-banner">
+      <div class="line-flow" id="lineStationsFlow">
+        <div class="station-node"><span>SAW-01</span><span class="buffer-pill">buf 0/10</span><span class="pill OK">RUNNING</span></div>
+        <span class="flow-arrow">→</span>
+        <div class="station-node"><span>LATHE-01</span><span class="buffer-pill">buf 4/10</span><span class="pill OK">RUNNING</span></div>
+        <span class="flow-arrow">→</span>
+        <div class="station-node"><span>VMC-01 ★</span><span class="buffer-pill">buf 4/10</span><span class="pill OK">RUNNING</span></div>
+      </div>
+      <div class="line-kpis">
+        <div class="kpi-item">
+          <span class="kpi-label">Line Rate</span>
+          <span class="kpi-val" id="lineThroughput">— /h</span>
+        </div>
+        <div class="kpi-item">
+          <span class="kpi-label">Line Loss Est.</span>
+          <span class="kpi-val" id="lineLoss" style="color:var(--status-warn);">₹0 /h</span>
+        </div>
+        <div class="kpi-item">
+          <span class="kpi-label">Bottleneck</span>
+          <span class="kpi-val" id="lineBottleneck">—</span>
+        </div>
+        <div class="kpi-item">
+          <span class="kpi-label">Air Supply (Shared Utility)</span>
+          <span class="kpi-val" id="lineAirSupply" style="color:var(--status-ok);">OPTIMAL</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4-Machine Factory Assets Grid -->
+    <section class="machine-grid" id="machineGrid">
+      <!-- Populated dynamically by app.js -->
+    </section>
+
+    <!-- Lower Split: Digital Twin Inspector & Operations Panel -->
+    <div class="lower-layout">
+      <!-- Left Column: Detailed Inspector, Controls, Economics -->
+      <div style="display:flex; flex-direction:column; gap:20px;">
+        <!-- Detailed Inspector Panel -->
+        <section class="panel" id="detailView">
+          <div class="text-muted">Loading telemetry model inspector...</div>
+        </section>
+
+        <!-- Fault Injection & Supervised Control Toolbar -->
+        <section class="panel">
+          <div class="panel-header">
+            <h2>Controlled Fault Injection & Self-Healing Testing</h2>
+          </div>
+          <div class="control-bar">
+            <label style="font-size:12px; color:var(--text-secondary);">Target Asset:</label>
+            <select id="faultMachineSelect">
+              <option value="VMC-01">VMC-01 (CNC Mill)</option>
+              <option value="LATHE-01">LATHE-01 (CNC Lathe)</option>
+              <option value="SAW-01">SAW-01 (Bar Saw)</option>
+              <option value="COMP-01">COMP-01 (Air Compressor)</option>
+            </select>
+
+            <label style="font-size:12px; color:var(--text-secondary);">Fault Mode:</label>
+            <select id="faultTypeSelect">
+              <option value="coolant_degradation">Gradual Coolant Degradation (Triggers Calibration)</option>
+              <option value="bearing_defect">Spindle Bearing Defect (Abrupt Anomaly - Freezes θ)</option>
+              <option value="overload">Spindle Overload Step (+22 Nm)</option>
+              <option value="tool_wear_accel">Accelerated Tool Wear (4x Rate)</option>
+              <option value="sensor_stuck">Process Temp Sensor Stuck (DQ Fault - Freezes θ)</option>
+              <option value="sensor_dropout">Process Temp Sensor Dropout (Missing)</option>
+              <option value="pressure_drop">Compressor Pressure Drop (Common Cause)</option>
+              <option value="blade_wear">Saw Blade Accelerated Wear</option>
+            </select>
+
+            <button class="btn btn-danger" onclick="injectSelectedFault()">Inject Fault</button>
+            <button class="btn" onclick="clearAllFaults()">Clear Faults</button>
+            <button class="btn" onclick="applyDerate(20)">Supervised Derate 20%</button>
+          </div>
+
+          <div style="display:flex; align-items:center; gap:8px; margin-top:10px; padding-top:8px; border-top:1px solid var(--border-subtle); flex-wrap:wrap;">
+            <span style="font-size:11px; font-weight:700; color:var(--accent-blue);">Competition Demo Scenarios:</span>
+            <button class="btn btn-sm" onclick="demoScenario('coolant')">1. Coolant Drift (VMC)</button>
+            <button class="btn btn-sm" onclick="demoScenario('bearing')">2. Bearing Anomaly (LATHE)</button>
+            <button class="btn btn-sm" onclick="demoScenario('compressor')">3. Compressor Common-Cause</button>
+            <button class="btn btn-sm" onclick="demoScenario('tool_wear')">4. Tool Wear Feedback</button>
+          </div>
+          <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">
+            Note: All fault injection targets the virtual plant simulator only. The digital twin is never pre-informed of injected faults.
+          </div>
+        </section>
+
+        <!-- MSME Economics & Sustainability Calculator -->
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>MSME Business Impact & Sustainability Calculator</h2>
+              <span style="font-size:11px; color:var(--text-muted);">Editable Shop Model · Transparent Formulas · CEA Grid Baseline v20</span>
+            </div>
+            <button class="btn btn-sm btn-primary" onclick="openEconomicsModal()">⚙ Edit Assumptions</button>
+          </div>
+          <div class="calc-grid">
+            <div class="calc-card">
+              <div class="calc-label">Line Production Loss Rate</div>
+              <div class="calc-val" id="calcLineLoss" style="color:var(--status-warn);">₹0 /hr</div>
+              <div class="formula-hint">max(0, nominal_rate - actual_rate) × ₹<span id="econInrPerPartHint">450</span>/part</div>
+            </div>
+            <div class="calc-card">
+              <div class="calc-label">Indicative Sensor Payback</div>
+              <div class="calc-val" id="calcPayback" style="color:var(--status-ok);">0.4 Months</div>
+              <div class="formula-hint">(4 nodes × ₹<span id="econNodeCostHint">2,200</span>) / monthly avoided breakdown value</div>
+            </div>
+            <div class="calc-card">
+              <div class="calc-label">Line Energy Consumption</div>
+              <div class="calc-val" id="calcEnergy">₹125.4 /hr (14.8 kW)</div>
+              <div class="formula-hint">Sum(kW) × ₹<span id="econTariffHint">8.5</span>/kWh industrial tariff</div>
+            </div>
+            <div class="calc-card">
+              <div class="calc-label">Carbon Emission Rate</div>
+              <div class="calc-val" id="calcCo2">10.6 kg/hr</div>
+              <div class="formula-hint">kWh × <span id="econCeaHint">0.716</span> kg CO₂/kWh (CEA Grid Factor 2024-25)</div>
+            </div>
+          </div>
+
+          <!-- Scenario Comparison & Sensitivity Matrix -->
+          <div style="margin-top:14px; background:var(--bg-card); border-radius:var(--radius-sm); padding:12px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+              <h4 style="font-size:13px; color:var(--text-secondary); font-weight:700;">Scenario Comparison: Reactive Baseline vs UDYAM-Twin Self-Calibrating Intervention</h4>
+              <span class="badge-sim" style="font-size:10px;">MSME SHOP MODEL</span>
+            </div>
+            <table class="telemetry-table" style="font-size:12px; margin-bottom:8px;">
+              <thead>
+                <tr style="color:var(--text-muted); text-align:left;">
+                  <th>Operating Dimension</th>
+                  <th>Baseline (Reactive)</th>
+                  <th>With UDYAM-Twin</th>
+                  <th style="color:var(--status-ok);">Net MSME Benefit</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Unplanned Downtime (hrs/mo)</td>
+                  <td id="scenBaseHours">12.0 hrs</td>
+                  <td id="scenTwinHours">3.6 hrs (-70%)</td>
+                  <td id="scenDowntimeSave" style="color:var(--status-ok); font-weight:700;">₹21,000 /mo saved</td>
+                </tr>
+                <tr>
+                  <td>Tool Breakages & Scrap Risk</td>
+                  <td>High (Catastrophic wear)</td>
+                  <td>Low (Predictive derate)</td>
+                  <td id="scenScrapSave" style="color:var(--status-ok); font-weight:700;">₹6,500 /mo saved</td>
+                </tr>
+                <tr>
+                  <td>Energy & Carbon Footprint</td>
+                  <td id="scenBaseEnergy">₹50,320 /mo · 4,238 kg CO₂</td>
+                  <td id="scenTwinEnergy">₹47,800 /mo · 4,025 kg CO₂</td>
+                  <td id="scenEnergySave" style="color:var(--status-ok); font-weight:700;">₹2,520 /mo · 213 kg CO₂</td>
+                </tr>
+                <tr style="border-top:1px solid var(--border-subtle); font-weight:700;">
+                  <td>Net Monthly Shop Benefit</td>
+                  <td style="color:var(--text-muted);">₹0</td>
+                  <td id="scenNetMonthly" style="color:var(--status-ok); font-size:13px;">₹30,020 /mo</td>
+                  <td id="scenRoiAnnual" style="color:var(--status-ok); font-size:13px;">1-Yr Net ROI: 3990%</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <!-- Sensitivity Matrix -->
+            <div style="font-size:11px; color:var(--text-muted); display:flex; justify-content:space-between; align-items:center; border-top:1px solid var(--border-subtle); padding-top:8px;">
+              <span><b>Sensitivity Analysis:</b> Payback at ₹1,500/hr = <b id="sensPay1500">0.7 mo</b> · at ₹2,500/hr = <b id="sensPay2500" style="color:var(--status-ok)">0.4 mo</b> · at ₹3,500/hr = <b id="sensPay3500">0.3 mo</b></span>
+              <span style="font-style:italic;">Engineering estimation model</span>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- Right Column: Events, Work Orders, Model Metrics -->
+      <div style="display:flex; flex-direction:column; gap:20px;">
+        <!-- Work Orders Panel -->
+        <section class="panel">
+          <div class="panel-header">
+            <h2>Operator Work Orders</h2>
+            <button class="btn btn-sm btn-primary" onclick="createWorkOrderFromAlert('VMC-01', 'Scheduled Inspection')">+ New Order</button>
+          </div>
+          <div id="workOrderList" style="display:flex; flex-direction:column; gap:8px;">
+            <!-- Populated dynamically -->
+          </div>
+        </section>
+
+        <!-- Explainable Event Log Stream -->
+        <section class="panel">
+          <div class="panel-header">
+            <h2>Explainable Event Log & Alert Cards</h2>
+          </div>
+          <div class="event-log" id="eventLog">
+            <!-- Populated dynamically -->
+          </div>
+        </section>
+
+        <!-- AI4I Research Intelligence & Benchmark Metrics Panel -->
+        <section class="panel">
+          <div class="panel-header">
+            <h2>AI4I Research Intelligence & Benchmark Evaluation</h2>
+            <span class="badge-sim" style="font-size:10px;">UCI BENCHMARK</span>
+          </div>
+          <div id="mlMetricsPanel" style="display:flex; flex-direction:column; gap:10px; font-size:12px;">
+            <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:8px;">
+              <div class="calc-card" style="padding:8px;">
+                <div class="calc-label">Random Forest F1</div>
+                <div class="calc-val" style="font-size:15px; color:var(--status-ok);" id="mlRfF1">98.6%</div>
+                <div class="formula-hint">Rule baseline: <span id="mlRuleF1">98.9%</span></div>
+              </div>
+              <div class="calc-card" style="padding:8px;">
+                <div class="calc-label">ROC-AUC / PR-AUC</div>
+                <div class="calc-val" style="font-size:15px; color:var(--status-ok);" id="mlRocAuc">0.996</div>
+                <div class="formula-hint">Precision: <span id="mlPrec">98.5%</span></div>
+              </div>
+              <div class="calc-card" style="padding:8px;">
+                <div class="calc-label">False Alarm Rate</div>
+                <div class="calc-val" style="font-size:15px; color:var(--status-info);" id="mlFpr">0.55%</div>
+                <div class="formula-hint">8 FP / 1444 TN test</div>
+              </div>
+            </div>
+
+            <!-- Feature Importances -->
+            <div style="background:var(--bg-card); border-radius:var(--radius-sm); padding:10px;">
+              <div style="font-size:11px; font-weight:700; color:var(--text-secondary); margin-bottom:6px;">Top Algorithmic Feature Importances (AI4I Classifier)</div>
+              <div style="display:flex; flex-direction:column; gap:4px; font-family:var(--font-mono); font-size:11px;">
+                <div style="display:flex; justify-content:space-between;"><span>1. Tool Wear [min]:</span><b>51.5%</b></div>
+                <div style="display:flex; justify-content:space-between;"><span>2. Power [kW]:</span><b>25.5%</b></div>
+                <div style="display:flex; justify-content:space-between;"><span>3. Torque [Nm]:</span><b>13.0%</b></div>
+                <div style="display:flex; justify-content:space-between;"><span>4. Rotational Speed [RPM]:</span><b>4.8%</b></div>
+                <div style="display:flex; justify-content:space-between;"><span>5. Temperature Delta [K]:</span><b>3.4%</b></div>
+              </div>
+            </div>
+
+            <div style="font-size:11px; color:var(--text-muted); line-height:1.4;">
+              <b>Research Integrity:</b> Vibration and current signals are reserved exclusively for the physical rule engine to prevent synthetic leakage. Evaluated on stratified 80/20 split (2,000 test samples).
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <!-- Modal: Onboarding Wizard -->
+  <div class="modal-overlay" id="onboardingModal">
+    <div class="modal">
+      <h3>Onboard New Machine Asset</h3>
+      <p style="font-size:12px; color:var(--text-secondary);">
+        Select an asset class template and enter nameplate ratings. The self-calibrating digital twin will initialize from class defaults and begin online parameter estimation.
+      </p>
+      <form onsubmit="submitOnboardingForm(event)">
+        <div class="form-group">
+          <label>Machine Class Template</label>
+          <select id="onboardTemplate" class="form-control">
+            <option value="air_compressor">Air Compressor (Screw/Piston Utility)</option>
+            <option value="cnc_mill">CNC Vertical Machining Center (VMC)</option>
+            <option value="cnc_lathe">CNC Turning Lathe</option>
+            <option value="bar_saw">Horizontal Metal Bar Saw</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Machine Display Name</label>
+          <input type="text" id="onboardName" class="form-control" value="Rotary Screw Compressor 2" required>
+        </div>
+        <div class="form-group">
+          <label>Rated Motor Power (kW)</label>
+          <input type="number" id="onboardKw" class="form-control" value="7.5" step="0.1" required>
+        </div>
+        <div class="form-group">
+          <label>Rated Operating Envelope (Max RPM / Rated Pressure Bar)</label>
+          <input type="number" id="onboardRpm" class="form-control" value="8.0" step="0.5" required>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn" onclick="closeOnboardingModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary">Add Machine to Floor</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Tool Wear Measurement Feedback -->
+  <div class="modal-overlay" id="toolWearModal">
+    <div class="modal">
+      <h3>Operator Feedback: Tool Wear Entry</h3>
+      <p style="font-size:12px; color:var(--text-secondary);">
+        At cutting tool change, enter physical edge wear measurement. This human-in-the-loop observation recalibrates the twin's tool wear coefficient (k_wear).
+      </p>
+      <form onsubmit="submitToolWearForm(event)">
+        <input type="hidden" id="toolWearMachineId">
+        <div class="form-group">
+          <label>Measured Physical Flank Wear (minutes equivalent)</label>
+          <input type="number" id="toolWearValue" class="form-control" value="135.0" step="0.5" min="0" max="300" required>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn" onclick="closeToolWearModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary">Submit to Calibrator</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Customize MSME Economics Assumptions -->
+  <div class="modal-overlay" id="economicsModal">
+    <div class="modal">
+      <h3>MSME Economic & Sustainability Assumptions</h3>
+      <p style="font-size:12px; color:var(--text-secondary);">
+        Adjust shop operating rates and financial parameters. Calculations update in real-time and persist to the platform backend database.
+      </p>
+      <form onsubmit="submitEconomicsForm(event)">
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+          <div class="form-group">
+            <label>Machine Downtime Cost (₹/hr)</label>
+            <input type="number" id="inputDowntimeCost" class="form-control" value="2500" step="100" min="500" required>
+          </div>
+          <div class="form-group">
+            <label>Product Gross Margin (₹/part)</label>
+            <input type="number" id="inputPartMargin" class="form-control" value="450" step="10" min="50" required>
+          </div>
+          <div class="form-group">
+            <label>Electricity Tariff (₹/kWh)</label>
+            <input type="number" id="inputElectricityTariff" class="form-control" value="8.5" step="0.1" min="1" required>
+          </div>
+          <div class="form-group">
+            <label>IoT Sensor Node BOM (₹/machine)</label>
+            <input type="number" id="inputSensorCost" class="form-control" value="2200" step="100" min="500" required>
+          </div>
+          <div class="form-group">
+            <label>Baseline Breakdown (hrs/month)</label>
+            <input type="number" id="inputBaseHours" class="form-control" value="12" step="0.5" min="1" required>
+          </div>
+          <div class="form-group">
+            <label>CEA CO₂ Factor (kg/kWh)</label>
+            <input type="number" id="inputCeaFactor" class="form-control" value="0.716" step="0.001" min="0.1" required>
+          </div>
+        </div>
+        <div class="modal-actions" style="margin-top:12px;">
+          <button type="button" class="btn" onclick="closeEconomicsModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save & Recalculate</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

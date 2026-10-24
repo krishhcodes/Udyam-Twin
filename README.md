@@ -5,22 +5,38 @@ A self-calibrating, browser-based digital twin for MSME machine shops: a 4-machi
 - **Plan:** [`docs/MASTER_PLAN.md`](docs/MASTER_PLAN.md) · **your role:** [`docs/briefs/`](docs/briefs/)
 - **Message contract (frozen v1.0):** [`docs/SCHEMA.md`](docs/SCHEMA.md) + [`docs/schema.json`](docs/schema.json)
 
-## Quick start (day 1: fake stream)
+## Quick start
 
-The real twin core isn't built yet. A **fake stream** emits exactly the messages the real one will, so 3D, backend and dashboard work can start now.
-
+### 1. Production Digital Twin Platform (FastAPI + Dashboard + WebSocket)
 ```bash
 python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\activate
 pip install -r requirements-dev.txt
+python -m uvicorn api.app:app --host 0.0.0.0 --port 8000   # or run start.bat
+```
+- Open Dashboard: [http://localhost:8000](http://localhost:8000)
+- Mobile Operator Screen: [http://localhost:8000/operator](http://localhost:8000/operator)
+- Interactive API Docs: [http://localhost:8000/docs](http://localhost:8000/docs)
+- WebSocket: `ws://localhost:8000/ws/telemetry`
+
+### 2. Standalone Fake Stream Server (Day 1 Dev Harness)
+```bash
 python -m tools.fake_stream                              # then open http://localhost:8765
 ```
-
 - WebSocket: `ws://localhost:8765/ws/telemetry`. Every message follows `docs/schema.json`.
-- It runs a scripted **150-second demo loop**: coolant drift → twin recalibrates → over-temperature forecast → auto-derate → compressor common cause → bearing anomaly (calibration frozen) → reset.
+- Scripted **150-second demo loop**: coolant drift → twin recalibrates → over-temperature forecast → auto-derate → compressor common cause → bearing anomaly (calibration frozen) → reset.
 - `--machines 3` starts without the compressor (to test the "Add your machine" wizard); `--no-auto` turns off the scripted faults.
-- **No Python?** Use [`samples/demo_stream.jsonl`](samples/demo_stream.jsonl): one message per line, one full loop. Replay it at 10 messages per tick.
+- **No Python?** Use [`samples/demo_stream.jsonl`](samples/demo_stream.jsonl): one message per line, one full loop.
 
-Run the tests: `python -m pytest`
+### 3. ML Model Training & Evaluation
+```bash
+python -m ml.train
+```
+Generates `ml/model.joblib` and `ml/metrics.json` comparing rule baseline vs. Random Forest.
+
+### 4. Running the Tests
+```bash
+python -m pytest -v
+```
 
 ## Layout
 

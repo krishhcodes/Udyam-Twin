@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UDYAM-TWIN — Operator Floor View</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <style>
+    body {
+      background: #0d131f;
+      padding: 16px;
+    }
+    .operator-container {
+      max-width: 600px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .big-status-card {
+      background: var(--bg-surface);
+      border: 2px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+    .big-status-card.OK { border-color: var(--status-ok); }
+    .big-status-card.WARN { border-color: var(--status-warn); }
+    .big-status-card.CRITICAL { border-color: var(--status-crit); }
+    .big-status-title {
+      font-size: 26px;
+      font-weight: 800;
+    }
+    .big-advice {
+      background: rgba(0,0,0,0.3);
+      padding: 16px;
+      border-radius: var(--radius-md);
+      font-size: 15px;
+      line-height: 1.5;
+      text-align: left;
+      width: 100%;
+    }
+    .big-btn {
+      width: 100%;
+      padding: 14px;
+      font-size: 16px;
+      font-weight: 700;
+      justify-content: center;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="operator-container">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <div>
+        <h1 style="font-size:20px; font-weight:700;">Machine Operator Terminal</h1>
+        <span class="badge-sim">SIMULATION MODE</span>
+      </div>
+      <a href="/" class="btn btn-sm">Engineer View 💻</a>
+    </div>
+
+    <!-- Active Asset Selector -->
+    <div style="display:flex; align-items:center; gap:8px;">
+      <label style="font-size:13px; color:var(--text-secondary);">Select Machine:</label>
+      <select id="opMachineSelect" class="form-control" style="flex:1;" onchange="changeOpMachine(this.value)">
+        <option value="VMC-01">VMC-01 (CNC Mill ★ Hero)</option>
+        <option value="LATHE-01">LATHE-01 (CNC Lathe)</option>
+        <option value="SAW-01">SAW-01 (Bar Saw)</option>
+        <option value="COMP-01">COMP-01 (Air Compressor)</option>
+      </select>
+    </div>
+
+    <!-- Big Status Indicator -->
+    <div class="big-status-card OK" id="opStatusCard">
+      <span class="pill OK" style="font-size:14px; padding:4px 12px;" id="opPlcPill">RUN</span>
+      <div class="big-status-title" id="opMachineTitle">VMC-01 — Optimal</div>
+      <div style="font-size:13px; color:var(--text-muted);" id="opMetricsSummary">
+        Spindle: 1540 RPM · Temp: 311.5 K · Tool Life: Normal
+      </div>
+
+      <div class="big-advice" id="opAdviceBox">
+        <b>Current Status:</b> Operating normally within nominal thermal envelope.<br>
+        <b>Suggested Next Step:</b> Continue production. Next tool inspection scheduled in 80 parts.
+      </div>
+
+      <div style="display:flex; gap:10px; width:100%;">
+        <button class="btn btn-primary big-btn" onclick="opAcknowledge()">✓ Acknowledge</button>
+        <button class="btn big-btn" onclick="openToolWearModal(currentOpMachine)">Tool Change 🔧</button>
+      </div>
+    </div>
+
+    <!-- Active Work Orders for Operator -->
+    <div class="panel">
+      <h3 style="font-size:16px; font-weight:600;">Active Tasks & Work Orders</h3>
+      <div id="opWorkOrderList" style="display:flex; flex-direction:column; gap:8px;">
+        <div class="text-muted" style="font-size:13px;">No pending maintenance actions.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Tool Wear Measurement Feedback -->
+  <div class="modal-overlay" id="toolWearModal">
+    <div class="modal">
+      <h3>Operator Feedback: Tool Wear Entry</h3>
+      <p style="font-size:12px; color:var(--text-secondary);">
+        At cutting tool change, enter physical edge wear measurement. This human-in-the-loop observation recalibrates the twin's tool wear coefficient (k_wear).
+      </p>
+      <form onsubmit="submitToolWearForm(event)">
+        <input type="hidden" id="toolWearMachineId">
+        <div class="form-group">
+          <label>Measured Physical Flank Wear (minutes equivalent)</label>
+          <input type="number" id="toolWearValue" class="form-control" value="135.0" step="0.5" min="0" max="300" required>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn" onclick="closeToolWearModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary">Submit to Calibrator</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    let currentOpMachine = "VMC-01";
+    let ws = null;
+    const loc = window.location;
+    const wsProto = loc.protocol === "https:" ? "wss://" : "ws://";
+    const wsUrl = `${wsProto}${loc.host || 'localhost:8000'}/ws/telemetry`;
+
+    function connectWs() {
+      ws = new WebSocket(wsUrl);
+      ws.onmessage = (e) => {
+        try {
+          const msg = JSON.parse(e.data);
+          if (msg.type === "observed" && msg.machine_id === currentOpMachine) {
+            updateOpObs(msg);
+          } else if (msg.type === "twin" && msg.machine_id === currentOpMachine) {
+            updateOpTwin(msg);
+          } else if (msg.type === "event" && (msg.machine_id === currentOpMachine || !msg.machine_id)) {
+            updateOpEvent(msg);
+          }
+        } catch (err) {}
+      };
+      ws.onclose = () => setTimeout(connectWs, 2000);
+    }
+
+    function changeOpMachine(mid) {
+      currentOpMachine = mid;
+      document.getElementById("opMachineTitle").textContent = `${mid} — Monitoring`;
+    }
+
+    function updateOpObs(o) {
+      const summary = `Speed: ${o.rpm || 0} RPM · Process Temp: ${o.process_temp_k || '—'} K · Vibration: ${o.vibration_rms_mm_s || 0} mm/s`;
+      document.getElementById("opMetricsSummary").textContent = summary;
+      const pill = document.getElementById("opPlcPill");
+      pill.textContent = o.plc_state;
+      pill.className = `pill ${o.plc_state}`;
+    }
+
+    function updateOpTwin(t) {
+      const card = document.getElementById("opStatusCard");
+      const risk = t.risk?.rules || "LOW";
+      card.className = `big-status-card ${risk === 'HIGH' ? 'CRITICAL' : (risk === 'MEDIUM' ? 'WARN' : 'OK')}`;
+
+      if (t.forecast?.warning) {
+        document.getElementById("opAdviceBox").innerHTML = `
+          <b style="color:var(--status-crit)">⚠ ALERT: ${t.forecast.warning} Impending (~${Math.round(t.forecast.minutes_to_warning || 0)} min)</b><br>
+          <b>Inference:</b> Thermal cooling capacity or tool life degraded.<br>
+          <b>Operator Action:</b> Inspect coolant flow, prepare tool replacement, or reduce machine speed setpoint.
+        `;
+      }
+    }
+
+    function updateOpEvent(e) {
+      if (e.suggested || e.inferred) {
+        document.getElementById("opAdviceBox").innerHTML = `
+          <b>${e.title}</b><br>
+          <b>Inference:</b> ${e.inferred || 'Condition flagged by twin'}<br>
+          <b>Suggested Action:</b> ${e.suggested || 'Check machine status'}
+        `;
+      }
+    }
+
+    function opAcknowledge() {
+      alert("Status acknowledged by machine operator.");
+    }
+
+    function openToolWearModal(mid) {
+      document.getElementById("toolWearMachineId").value = mid;
+      document.getElementById("toolWearModal").classList.add("open");
+    }
+
+    function closeToolWearModal() {
+      document.getElementById("toolWearModal").classList.remove("open");
+    }
+
+    function submitToolWearForm(e) {
+      e.preventDefault();
+      const mid = document.getElementById("toolWearMachineId").value;
+      const wear = parseFloat(document.getElementById("toolWearValue").value);
+      fetch("/api/tool-wear", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ machine_id: mid, measured_wear_min: wear })
+      }).then(() => {
+        closeToolWearModal();
+        alert("Operator measurement logged. Calibration updated.");
+      });
+    }
+
+    connectWs();
+  </script>
+</body>
+</html>
