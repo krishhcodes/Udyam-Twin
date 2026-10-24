@@ -421,3 +421,7 @@ if WEB_DIR.exists():
         return FileResponse(WEB_DIR / "index.html" if (WEB_DIR / "index.html").exists() else ROOT / "tools" / "stream_viewer.html")
 
     app.mount("/static", StaticFiles(directory=str(WEB_DIR)), name="static")
+
+ASSETS_DIR = ROOT / "assets"
+if ASSETS_DIR.exists():
+    app.mount("/assets", StaticFiles(directory=str(ASSETS_DIR)), name="assets")

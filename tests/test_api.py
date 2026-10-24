@@ -151,3 +151,24 @@ def test_metrics_endpoint(client):
     assert "random_forest" in data
     assert "honest_disclaimer" in data
     assert data["vibration_and_current_excluded_from_ml"] is True
+
+
+def test_static_3d_assets_served(client):
+    """Verify that all Blender-exported 3D GLB assets are served over HTTP."""
+    from pathlib import Path
+    assets_dir = Path(__file__).resolve().parent.parent / "assets" / "3d"
+    assert (assets_dir / "udyam_factory.blend").exists()
+
+    expected_assets = [
+        ("saw_01.glb", 50000),
+        ("lathe_01.glb", 50000),
+        ("vmc_01.glb", 50000),
+        ("comp_01.glb", 50000),
+        ("factory_scene.glb", 200000),
+    ]
+
+    for filename, min_bytes in expected_assets:
+        res = client.get(f"/assets/3d/{filename}")
+        assert res.status_code == 200, f"Failed to fetch /assets/3d/{filename}"
+        assert len(res.content) >= min_bytes, f"Asset {filename} size too small: {len(res.content)} bytes"
+

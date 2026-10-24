@@ -280,6 +280,7 @@ function renderDetailPanel() {
             <span class="pill OK" id="threeSpindleRpm">— RPM</span>
           </div>
           <div style="display:flex; gap:6px;">
+            <button class="btn btn-sm" onclick="if(window.showFactoryOverview) window.showFactoryOverview()">Factory Floor 🏭</button>
             <button class="btn btn-sm" onclick="if(window.resetThreeView) window.resetThreeView()">Reset Camera</button>
             <button class="btn btn-sm" id="btnToggleAnim" onclick="if(window.toggleThreeAnimation) window.toggleThreeAnimation()">Pause</button>
           </div>
@@ -287,7 +288,7 @@ function renderDetailPanel() {
         <div id="threeCanvasWrapper" style="position:relative; width:100%; border:1px solid var(--border-subtle); border-radius:var(--radius-sm); overflow:hidden; background:#0a0e17;"></div>
         <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--text-muted); margin-top:4px;">
           <span>Left-click + drag: Orbit · Scroll: Zoom · Right-click + drag: Pan</span>
-          <span>Three.js Procedural Digital Twin</span>
+          <span id="threeModelBadge" style="font-weight:600; color:var(--status-ok);">Blender Photorealistic GLB</span>
         </div>
       </div>
     `;
@@ -893,6 +894,30 @@ function fetchMetrics() {
     .catch(() => {});
 }
 
+// Expose interactive functions globally for HTML inline handlers
+window.toggleAutoDemo = toggleAutoDemo;
+window.resetScenario = resetScenario;
+window.openOnboardingModal = openOnboardingModal;
+window.closeOnboardingModal = closeOnboardingModal;
+window.submitOnboardingForm = submitOnboardingForm;
+window.openToolWearModal = openToolWearModal;
+window.closeToolWearModal = closeToolWearModal;
+window.submitToolWearForm = submitToolWearForm;
+window.openEconomicsModal = openEconomicsModal;
+window.closeEconomicsModal = closeEconomicsModal;
+window.submitEconomicsForm = submitEconomicsForm;
+window.injectSelectedFault = injectSelectedFault;
+window.clearAllFaults = clearAllFaults;
+window.applyDerate = applyDerate;
+window.demoScenario = demoScenario;
+window.createWorkOrderFromAlert = createWorkOrderFromAlert;
+window.updateWo = updateWo;
+window.selectMachine = selectMachine;
+window.fetchRegistry = fetchRegistry;
+window.fetchWorkOrders = fetchWorkOrders;
+window.fetchEconomics = fetchEconomics;
+window.fetchMetrics = fetchMetrics;
+
 // -----------------------------------------------------------------------------
 // Initial Bootstrap
 // -----------------------------------------------------------------------------
@@ -904,3 +929,4 @@ window.addEventListener("DOMContentLoaded", () => {
   fetchEconomics();
   fetchMetrics();
 });
+
